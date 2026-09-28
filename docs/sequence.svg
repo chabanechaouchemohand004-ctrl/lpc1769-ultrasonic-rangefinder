@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="250" viewBox="0 0 900 250" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">
+  <rect width="900" height="250" rx="10" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <!-- signal names -->
+  <text x="20" y="62" font-weight="600" fill="#7a3b06">P2.13 (salve)</text>
+  <text x="20" y="132" font-weight="600" fill="#1d3557">P1.18 (LM311)</text>
+  <text x="20" y="200" font-weight="600" fill="#333">Capture</text>
+
+  <!-- burst: 8 cycles -->
+  <path d="M130,70 L150,70 L150,45 L156,45 L156,70 L162,70 L162,45 L168,45 L168,70 L174,70 L174,45 L180,45 L180,70 L186,70 L186,45 L192,45 L192,70 L198,70 L198,45 L204,45 L204,70 L210,70 L210,45 L216,45 L216,70 L222,70 L222,45 L228,45 L228,70 L860,70" fill="none" stroke="#c46a1b" stroke-width="2"/>
+
+  <!-- comparator: crosstalk pulse (ignored) + echo pulse -->
+  <path d="M130,140 L160,140 L160,115 L200,115 L200,140 L640,140 L640,115 L680,115 L680,140 L860,140" fill="none" stroke="#3b6fb6" stroke-width="2"/>
+  <text x="180" y="108" text-anchor="middle" font-size="11" fill="#888">couplage direct</text>
+  <text x="660" y="108" text-anchor="middle" font-size="11" fill="#1d3557">écho</text>
+
+  <!-- zones -->
+  <rect x="150" y="160" width="100" height="26" fill="#f3e5e5" stroke="#c9a0a0"/>
+  <text x="200" y="178" text-anchor="middle" font-size="11" fill="#7a2e2e">capture coupée</text>
+  <rect x="250" y="160" width="580" height="26" fill="#e7f1e7" stroke="#9cc49c"/>
+  <text x="540" y="178" text-anchor="middle" font-size="11" fill="#2e5e2e">écoute : capture sur front montant</text>
+
+  <!-- markers -->
+  <line x1="150" y1="35" x2="150" y2="230" stroke="#999" stroke-dasharray="3 3"/>
+  <line x1="250" y1="35" x2="250" y2="230" stroke="#999" stroke-dasharray="3 3"/>
+  <line x1="640" y1="35" x2="640" y2="230" stroke="#999" stroke-dasharray="3 3"/>
+  <line x1="830" y1="35" x2="830" y2="230" stroke="#999" stroke-dasharray="3 3"/>
+  <text x="150" y="28" text-anchor="middle" font-size="11" fill="#333">t0</text>
+  <text x="250" y="28" text-anchor="middle" font-size="11" fill="#333">t0 + 290 µs</text>
+  <text x="640" y="28" text-anchor="middle" font-size="11" fill="#333">CR0</text>
+  <text x="830" y="28" text-anchor="middle" font-size="11" fill="#333">t0 + 14,5 ms</text>
+
+  <!-- tof arrow -->
+  <line x1="152" y1="212" x2="638" y2="212" stroke="#444" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="395" y="232" text-anchor="middle" fill="#222">temps de vol = CR0 − t0   →   d = c · t / 2</text>
+  <text x="830" y="245" text-anchor="middle" font-size="11" fill="#555">MR1 : hors portée</text>
+</svg>
