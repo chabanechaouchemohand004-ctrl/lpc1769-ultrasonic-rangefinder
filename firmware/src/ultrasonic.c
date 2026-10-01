@@ -58,7 +58,7 @@ void us_init(void)
     LPC_TIM1->PR   = 0u;
     LPC_TIM1->MCR  = 0u;            /* pas de reset sur match : TC libre */
     LPC_TIM1->CCR  = 0u;
-    LPC_TIM1->IR   = 0x3Fu;
+    LPC_TIM1->IR   = 0x3Fu;         /* acquitte les 6 sources : MR0-3, CR0-1 */
     LPC_TIM1->TCR  = 1u;            /* démarrage */
 
     NVIC_SetPriority(TIMER1_IRQn, 0);   /* le plus prioritaire : timing de la salve */
@@ -72,7 +72,7 @@ int us_start(void)
 
     edges  = 0;
     result = US_NONE;
-    t0 = LPC_TIM1->TC + 50u;        /* premier front 2 µs plus tard */
+    t0 = LPC_TIM1->TC + 50u;        /* 50 ticks x 40 ns = 2 µs de marge avant le premier front */
 
     LPC_TIM1->MR0 = t0;
     LPC_TIM1->MR1 = t0 + TIMEOUT_TICKS;

@@ -40,7 +40,8 @@
 #define MIN_CM         5u                         /* zone aveugle             */
 #define MAX_CM         250u                       /* au-delà : hors portée    */
 
-/* Aller-retour : t = 2d / c  ->  environ 58 µs par cm                       */
+/* Aller-retour : t = 2d / c = 0,02 m / 343 m/s = 58,3 µs par cm.              */
+/* On arrondit à 58 µs : erreur de 0,5 % sur BLANK_TICKS et TIMEOUT_TICKS.    */
 #define US_PER_CM      58u
 #define BLANK_TICKS    (MIN_CM * US_PER_CM * TICKS_PER_US)   /* 290 µs  */
 #define TIMEOUT_TICKS  (MAX_CM * US_PER_CM * TICKS_PER_US)   /* 14,5 ms */

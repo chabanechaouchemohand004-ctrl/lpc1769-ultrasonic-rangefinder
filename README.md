@@ -1,12 +1,32 @@
 # Télémètre ultrason 40 kHz — LPC1769 (C bare-metal)
 
+[![build](https://github.com/chabanechaouchemohand004-ctrl/lpc1769-ultrasonic-rangefinder/actions/workflows/build.yml/badge.svg)](https://github.com/chabanechaouchemohand004-ctrl/lpc1769-ultrasonic-rangefinder/actions/workflows/build.yml)
+
 Mesure de distance par temps de vol d'une salve ultrason, pour un robot mobile.
 Émission, chaîne de réception analogique et firmware C sans HAL ni bibliothèque : accès direct aux registres du LPC1769 (Cortex-M3).
 
-**Projet d'équipe (L3 EEA, UE 3EE206, Sorbonne Université).**
+**Projet d'équipe de 6 personnes, 15 jours, présenté en soutenance (L3 EEA, UE 3EE206, Sorbonne Université).**
 **Module dont j'avais la charge : le télémètre** — frontal analogique d'émission et de réception, firmware bare-metal et simulation.
 
-![Chaîne de mesure](docs/chaine.svg)
+## Statut
+
+| | |
+|---|---|
+| Théorie | Validée : la simulation de la chaîne analogique et les tests sur PC (TIMER1 simulé) donnent les résultats attendus. |
+| Pratique | Plus difficile que la théorie. Le montage a fonctionné en partie pendant le projet de cours, sans validation de bout en bout et sans capture d'oscilloscope. |
+| Pas fait | Validation sur maquette avec le transducteur réel (voir « Pistes d'amélioration »). |
+| Origine du code | Le firmware de ce dépôt est ma version reprise après le cours : build GCC, intégration continue, FIFO UART, tests sur PC. Ce n'est pas le code exact qui a tourné sur le robot. |
+
+Les autres modules du robot (induction, DTMF, infrarouge, liaison base-poste-supervision) ont été réalisés par les autres membres de l'équipe et ne sont pas dans ce dépôt.
+
+## Démarrage rapide
+
+Toolchain requise : `arm-none-eabi-gcc` (firmware) et `gcc` (tests sur PC).
+
+```
+make -C firmware test    # tests sur PC, sans carte
+make -C firmware         # -> firmware/build/rangefinder.elf / .bin / .hex
+```
 
 ## Contexte
 
@@ -21,7 +41,7 @@ Le télémètre permet au robot de détecter un obstacle devant lui.
 | | |
 |---|---|
 | Fréquence ultrason | 40 kHz, salve de 8 périodes (200 µs) |
-| Portée | 5 à 250 cm |
+| Portée (objectif de conception, non mesuré) | 5 à 250 cm |
 | Résolution du chronométrage | 40 ns (TIMER1 à 25 MHz) |
 | Cadence de mesure | 10 / 15 / 20 / 25 Hz (2 interrupteurs) |
 | Filtre de réception | RLC série 100 µH / 160 nF, soit f0 ≈ 39,8 kHz |
@@ -29,7 +49,14 @@ Le télémètre permet au robot de détecter un obstacle devant lui.
 | Détection | détecteur de crête, puis comparateur LM311 (seuil Vref = 6 V) |
 | Debug | UART0 à 115200 bauds, 4 modes |
 
-## Fonctionnement du firmware
+La portée minimale de 5 cm vient du banc de test sur PC. Un transducteur 40 kHz oscille souvent 0,5 à 1 ms après la salve : avec 1 ms de résonance résiduelle, la portée minimale réelle est d'environ 17 cm (343 × 0,001 / 2).
+La démo de la soutenance utilisait 9600 bauds ; cette version utilise 115200 bauds.
+
+## Architecture
+
+![Chaîne de mesure](docs/chaine.svg)
+
+### Séquence de mesure
 
 ![Séquence de mesure](docs/sequence.svg)
 
@@ -120,7 +147,7 @@ Horloge : CCLK = 100 MHz (`system_LPC17xx.c`), PCLK = 25 MHz.
 - Ajuster la zone aveugle sur banc (`MIN_CM` dans `board.h`) : un transducteur 40 kHz oscille souvent 0,5 à 1 ms après la salve, plus que les 290 µs actuelles.
 - Seuil adaptatif ou gain croissant dans le temps, car l'écho s'atténue avec la distance.
 - Correction de la vitesse du son en fonction de la température (+0,6 m/s par °C).
-- Validation sur maquette avec captures oscilloscope de la salve, de l'écho et de la sortie du comparateur.
+- Valider sur maquette, avec captures d'oscilloscope de la salve, de l'écho et de la sortie du comparateur, puis mesurer la portée minimale réelle.
 
 ## Structure
 

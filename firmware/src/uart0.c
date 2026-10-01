@@ -30,13 +30,16 @@ void uart0_init(void)
     LPC_PINCON->PINSEL0 &= ~((3u << 4) | (3u << 6));
     LPC_PINCON->PINSEL0 |=  ((1u << 4) | (1u << 6));
 
-    /* 115200 bauds : 25 MHz / (16 x 12 x (1 + 1/8)) = 115 741 bauds (+0,5 %) */
-    LPC_UART0->LCR = 0x83;                   /* 8N1, accès aux diviseurs  */
+    /* Débit = PCLK / (16 x (256 x DLM + DLL) x (1 + DIVADDVAL / MULVAL))
+     *       = 25 MHz / (16 x 12 x (1 + 1/8)) = 115 741 bauds (+0,5 % vs 115 200)
+     * DLL = 12, MULVAL = 8, DIVADDVAL = 1 (contrainte du LPC17xx : MULVAL >= 1,
+     * DIVADDVAL < MULVAL). */
+    LPC_UART0->LCR = 0x83;                   /* 8N1 (bits 1:0 = 11), DLAB = 1 : accès aux diviseurs */
     LPC_UART0->DLM = 0;
     LPC_UART0->DLL = 12;
     LPC_UART0->FDR = (8u << 4) | 1u;         /* MULVAL = 8, DIVADDVAL = 1 */
-    LPC_UART0->LCR = 0x03;                   /* 8N1                        */
-    LPC_UART0->FCR = 0x07;                   /* FIFO activées et vidées   */
+    LPC_UART0->LCR = 0x03;                   /* 8N1, DLAB = 0              */
+    LPC_UART0->FCR = 0x07;                   /* bit 0 : FIFO activées, bits 1-2 : vidage RX et TX */
     LPC_UART0->IER = 1u;                     /* interruption en réception */
 
     NVIC_SetPriority(UART0_IRQn, 2);
