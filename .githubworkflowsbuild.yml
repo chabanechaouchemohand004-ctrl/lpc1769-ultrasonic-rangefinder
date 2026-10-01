@@ -1,0 +1,21 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
+      - name: Tests sur PC
+        run: make -C firmware test
+      - name: Firmware (arm-none-eabi-gcc)
+        run: make -C firmware
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rangefinder-firmware
+          path: |
+            firmware/build/rangefinder.bin
+            firmware/build/rangefinder.hex
