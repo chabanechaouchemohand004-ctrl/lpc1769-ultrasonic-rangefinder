@@ -1,0 +1,23 @@
+# Keil µVision
+Objects/
+Listings/
+*.axf
+*.o
+*.d
+*.crf
+*.lnp
+*.dep
+*.htm
+*.iex
+*.map
+*.lst
+*.bak
+*.uvguix.*
+*.uvgui.*
+*.base@*
+
+# Tests PC
+firmware/test/test_ultrasonic
+
+# Build GCC
+firmware/build/
