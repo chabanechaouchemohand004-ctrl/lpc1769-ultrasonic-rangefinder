@@ -1,103 +1,67 @@
-# Télémètre ultrason 40 kHz — LPC1769 (C bare-metal)
+# 40 kHz ultrasonic rangefinder on LPC1769 (bare-metal C)
 
 [![build](https://github.com/chabanechaouchemohand004-ctrl/lpc1769-ultrasonic-rangefinder/actions/workflows/build.yml/badge.svg)](https://github.com/chabanechaouchemohand004-ctrl/lpc1769-ultrasonic-rangefinder/actions/workflows/build.yml)
 
-Mesure de distance par temps de vol d'une salve ultrason, pour un robot mobile.
-Émission, chaîne de réception analogique et firmware C sans HAL ni bibliothèque : accès direct aux registres du LPC1769 (Cortex-M3).
+Time-of-flight distance measurement for a wire-following mobile robot: 40 kHz burst, analog receive chain, and register-level C firmware on an NXP LPC1769 (Cortex-M3), no HAL. L3 EEA team project (6 people, 15 days), UE 3EE206, Sorbonne Université. **My module: the rangefinder** (analog front end, firmware, simulation).
 
-**Projet d'équipe de 6 personnes, 15 jours, présenté en soutenance (L3 EEA, UE 3EE206, Sorbonne Université).**
-**Module dont j'avais la charge : le télémètre** — frontal analogique d'émission et de réception, firmware bare-metal et simulation.
+- **Tools:** arm-none-eabi-gcc, Make, GitHub Actions CI, gcc for PC tests; Keil µVision 5 also supported.
+- **Flow:** TIMER1 match → 40 kHz burst → RLC filter → 2 × TL082 (×300) → peak detector → LM311 → TIMER1 hardware capture → distance → UART.
+- **Results:** 40.000 kHz burst, **40 ns** timing resolution, echo at 1 m detected at 5.936 ms in simulation (5.83 ms theoretical), firmware ≈ 2 KB flash, PC tests pass.
 
-## Statut
+The firmware here is my post-course version (GCC build, CI, UART FIFO, PC tests), not the exact code that ran on the robot.
 
-| | |
-|---|---|
-| Théorie | Validée : la simulation de la chaîne analogique et les tests sur PC (TIMER1 simulé) donnent les résultats attendus. |
-| Pratique | Plus difficile que la théorie. Le montage a fonctionné en partie pendant le projet de cours, sans validation de bout en bout et sans capture d'oscilloscope. |
-| Pas fait | Validation sur maquette avec le transducteur réel (voir « Pistes d'amélioration »). |
-| Origine du code | Le firmware de ce dépôt est ma version reprise après le cours : build GCC, intégration continue, FIFO UART, tests sur PC. Ce n'est pas le code exact qui a tourné sur le robot. |
+<img src="docs/systeme.png" width="520" alt="System overview: robots, base station and supervision">
 
-Les autres modules du robot (induction, DTMF, infrarouge, liaison base-poste-supervision) ont été réalisés par les autres membres de l'équipe et ne sont pas dans ce dépôt.
+## 1. Key figures
 
-## Démarrage rapide
+| Item | Value |
+| --- | --- |
+| Ultrasound | 40 kHz, 8-period burst (200 µs) |
+| Range | 5-250 cm (design target) |
+| Timing resolution | 40 ns (TIMER1 at 25 MHz) |
+| Measurement rate | 10 / 15 / 20 / 25 Hz (2 switches) |
+| Receive filter | Series RLC 100 µH / 160 nF, f0 ≈ 39.8 kHz |
+| Gain | ×300 (two TL082 stages, ×10 then ×30) |
+| Detection | Peak detector, then LM311 comparator (Vref = 6 V) |
+| Debug | UART0 at 115200 baud, 4 modes |
 
-Toolchain requise : `arm-none-eabi-gcc` (firmware) et `gcc` (tests sur PC).
+## 2. Architecture
 
-```
-make -C firmware test    # tests sur PC, sans carte
-make -C firmware         # -> firmware/build/rangefinder.elf / .bin / .hex
-```
+![Measurement chain](docs/chaine.svg)
 
-## Contexte
+![Measurement sequence](docs/sequence.svg)
 
-Des robots suivent un fil au sol et transportent des colis entre des postes ouvriers.
-Une base centrale et un poste de supervision pilotent le système par liaison série.
-Le télémètre permet au robot de détecter un obstacle devant lui.
+One timer (TIMER1) runs the whole measurement in interrupts, with no busy-wait:
 
-<img src="docs/systeme.png" width="520" alt="Vue d'ensemble du système">
+1. **Burst:** match `MR0` toggles P2.13 every 12.5 µs (312 then 313 ticks: exactly 40.000 kHz).
+2. **Blind zone (290 µs):** capture disabled to ignore direct TX → RX coupling.
+3. **Listen:** capture `CAP1.0` stores the comparator's rising edge in `CR0`. Time of flight = `CR0 − t0`, distance d = c·t/2.
+4. **Out of range:** match `MR1` stops listening at 14.5 ms (250 cm).
 
-## Chiffres clés
+The echo time is stamped **in hardware** (capture), so it does not depend on interrupt latency.
 
-| | |
-|---|---|
-| Fréquence ultrason | 40 kHz, salve de 8 périodes (200 µs) |
-| Portée (objectif de conception, non mesuré) | 5 à 250 cm |
-| Résolution du chronométrage | 40 ns (TIMER1 à 25 MHz) |
-| Cadence de mesure | 10 / 15 / 20 / 25 Hz (2 interrupteurs) |
-| Filtre de réception | RLC série 100 µH / 160 nF, soit f0 ≈ 39,8 kHz |
-| Amplification | ×300 (deux étages TL082, ×10 puis ×30) |
-| Détection | détecteur de crête, puis comparateur LM311 (seuil Vref = 6 V) |
-| Debug | UART0 à 115200 bauds, 4 modes |
+- **TIMER0** sets the measurement rate.
+- **UART0** sends frames without blocking through a 256-byte circular FIFO.
+- `DBG0`…`DBG3` received on the UART switch the debug mode.
 
-La portée minimale de 5 cm vient du banc de test sur PC. Un transducteur 40 kHz oscille souvent 0,5 à 1 ms après la salve : avec 1 ms de résonance résiduelle, la portée minimale réelle est d'environ 17 cm (343 × 0,001 / 2).
-La démo de la soutenance utilisait 9600 bauds ; cette version utilise 115200 bauds.
-
-## Architecture
-
-![Chaîne de mesure](docs/chaine.svg)
-
-### Séquence de mesure
-
-![Séquence de mesure](docs/sequence.svg)
-
-Toute la mesure est gérée par **un seul timer (TIMER1)** en interruption, sans attente active :
-
-1. **Salve** : le match `MR0` bascule P2.13 toutes les 12,5 µs (312 puis 313 ticks, soit 40,000 kHz exactement).
-2. **Zone aveugle (290 µs)** : la capture est coupée pour ignorer le couplage direct entre l'émetteur et le récepteur,
-   ainsi que les oscillations résiduelles du transducteur après la salve.
-3. **Écoute** : la capture `CAP1.0` enregistre dans `CR0` l'instant du front montant du comparateur.
-   Le temps de vol vaut `CR0 − t0`, et la distance `d = c·t/2`.
-4. **Hors portée** : le match `MR1` arrête l'écoute à 14,5 ms, soit 250 cm.
-
-L'instant de l'écho est horodaté **par le matériel** (capture) : il ne dépend pas de la latence d'interruption.
-Les fronts de la salve, eux, sont écrits dans l'interruption `MR0` : ils ont un retard de quelques dizaines de cycles, quasi constant.
-
-Le reste du firmware :
-
-- **TIMER0** donne la cadence des mesures.
-- **UART0** envoie les trames sans bloquer, grâce à une FIFO circulaire de 256 octets.
-- La commande `DBG0`…`DBG3` reçue sur l'UART change le mode de debug.
-
-| Interrupteurs DBG | Trame envoyée |
-|---|---|
+| DBG switches | Frame sent |
+| --- | --- |
 | 00 | `T 102 cm` |
-| 01 | `T0x0243B0` (temps de vol brut, en ticks de 40 ns) |
+| 01 | `T0x0243B0` (raw time of flight, 40 ns ticks) |
 | 10 | `T 10 mes/sec` |
-| 11 | aucune trame (mode commande `DBGx` sur l'UART) |
+| 11 | none (`DBGx` command mode on the UART) |
 
-## Simulation de la chaîne de réception
+## 3. Receive-chain simulation
 
-Écho à 1 m : le signal traverse le filtre RLC, les deux étages d'amplification, le détecteur de crête et le comparateur.
-**La détection a lieu à 5,936 ms**, pour 5,83 ms théoriques à 343 m/s.
-L'écart d'environ 0,1 ms vient du temps de montée du détecteur de crête et peut se compenser par une calibration.
+Echo at 1 m through the RLC filter, both gain stages, the peak detector and the comparator. **Detection at 5.936 ms**, against 5.83 ms theoretical at 343 m/s; the 0.1 ms offset is the peak detector's rise time, removable by calibration.
 
-![Simulation](docs/simulation-chaine.png)
+![Receive-chain simulation](docs/simulation-chaine.png)
 
-## Tests (sur PC, sans carte)
+## 4. Tests on PC (no board)
 
-`firmware/test/` simule TIMER1 tick par tick et appelle les interruptions comme le ferait le matériel :
+`firmware/test/` simulates TIMER1 tick by tick and calls the interrupt handlers as the hardware would. It also covers the 32-bit counter overflow during a measurement.
 
-```
+```text
 $ cd firmware/test && make
 salve : 16 fronts, 7 periodes = 4375 ticks -> 40000.0 Hz
 echo a 5,936 ms : tof = 148400 ticks (5.936 ms) -> 1018 mm
@@ -108,54 +72,43 @@ UART0 : 115741 bauds (cible 115200)
 ALL TESTS PASSED (0 failures)
 ```
 
-Le test couvre aussi le débordement du compteur 32 bits de TIMER1 pendant une mesure.
+## 5. Pinout (LPC1769)
 
-## Brochage (LPC1769)
+| Signal | Pin | Role |
+| --- | --- | --- |
+| Ultrasound burst | P2.13 (GPIO) | IR2304 driver input |
+| Echo | P1.18 (CAP1.0) | LM311 comparator output |
+| On / off | P0.30 | switch* |
+| Measurement rate | P0.28, P0.29 | switches* |
+| Debug mode | P1.30, P1.31 | switches (internal pull-up) |
+| Measurement LED | P0.22 | on during each measurement |
+| UART0 | P0.2 (TX), P0.3 (RX) | debug frames |
 
-| Signal | Broche | Rôle |
-|---|---|---|
-| Salve ultrason | P2.13 (GPIO) | entrée du driver IR2304 |
-| Écho | P1.18 (CAP1.0) | sortie du comparateur LM311 |
-| Marche / arrêt | P0.30 | interrupteur* |
-| Fréquence de mesure | P0.28, P0.29 | interrupteurs* |
-| Mode de debug | P1.30, P1.31 | interrupteurs (pull-up interne) |
-| LED de mesure | P0.22 | allumée pendant chaque mesure |
-| UART0 | P0.2 (TX), P0.3 (RX) | trames de debug |
+\* P0.28 is open-drain and P0.29/P0.30 have no internal pull-up: these three pins need an external pull resistor.
 
-\* P0.28 est open-drain et P0.29/P0.30 n'ont pas de pull-up interne : ces trois broches demandent une résistance de tirage externe.
+## Build
 
-## Compiler
-
-**En ligne de commande (GCC, sans Keil)** :
-
-```
-$ sudo apt install gcc-arm-none-eabi
-$ make -C firmware          # -> firmware/build/rangefinder.elf / .bin / .hex
-$ make -C firmware test     # tests sur PC
+```bash
+sudo apt install gcc-arm-none-eabi
+make -C firmware          # -> firmware/build/rangefinder.elf / .bin / .hex
+make -C firmware test     # PC tests
 ```
 
-- Le `.bin` reçoit automatiquement la somme de contrôle exigée par la ROM de boot LPC17xx (`tools/lpc_checksum.py`).
-- Firmware complet : environ 2 Ko de flash.
-- L'intégration continue (`.github/workflows/build.yml`) lance les tests et la compilation à chaque push.
+- The `.bin` gets the LPC17xx boot-ROM checksum automatically (`tools/lpc_checksum.py`).
+- CI (`.github/workflows/build.yml`) runs the tests and the build on every push.
+- Clocks: CCLK = 100 MHz, PCLK = 25 MHz.
 
-**Avec Keil µVision 5** : projet pour LPC1769 (*CMSIS Core* + *Device Startup*), puis ajouter les fichiers de `firmware/src/`.
+## Repository layout
 
-Horloge : CCLK = 100 MHz (`system_LPC17xx.c`), PCLK = 25 MHz.
-
-## Pistes d'amélioration
-
-- Ajuster la zone aveugle sur banc (`MIN_CM` dans `board.h`) : un transducteur 40 kHz oscille souvent 0,5 à 1 ms après la salve, plus que les 290 µs actuelles.
-- Seuil adaptatif ou gain croissant dans le temps, car l'écho s'atténue avec la distance.
-- Correction de la vitesse du son en fonction de la température (+0,6 m/s par °C).
-- Valider sur maquette, avec captures d'oscilloscope de la salve, de l'écho et de la sortie du comparateur, puis mesurer la portée minimale réelle.
-
-## Structure
-
+```text
+firmware/src/      main.c, ultrasonic.c (burst + time of flight), uart0.c, board.h (pinout)
+firmware/test/     PC tests of ultrasonic.c (simulated registers)
+firmware/startup/  startup code, linker script, system_LPC17xx.c
+firmware/cmsis/    CMSIS and LPC17xx headers
+tools/             flash image checksum
+docs/              measurement chain, sequence, simulation
 ```
-firmware/src/      main.c · ultrasonic.c (salve + temps de vol) · uart0.c · board.h (brochage)
-firmware/test/     tests sur PC du module ultrasonic.c (registres simulés)
-firmware/startup/  démarrage, script d'édition de liens, system_LPC17xx.c
-firmware/cmsis/    en-têtes CMSIS et LPC17xx
-tools/             somme de contrôle de l'image flash
-docs/              chaîne de mesure, séquence, simulation
-```
+
+## Credits
+
+Team of 6; the other robot modules (induction, DTMF, infrared, base-station link) belong to my teammates and are not in this repo. The rangefinder module is mine.
