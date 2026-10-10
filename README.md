@@ -1,33 +1,44 @@
-# 40 kHz ultrasonic rangefinder on LPC1769 (bare-metal C)
+# 40 kHz ultrasonic rangefinder on LPC1769
 
 [![build](https://github.com/chabanechaouchemohand004-ctrl/lpc1769-ultrasonic-rangefinder/actions/workflows/build.yml/badge.svg)](https://github.com/chabanechaouchemohand004-ctrl/lpc1769-ultrasonic-rangefinder/actions/workflows/build.yml)
 
-Time-of-flight distance measurement for a wire-following mobile robot: 40 kHz burst, analog receive chain, and register-level C firmware on an NXP LPC1769 (Cortex-M3), no HAL. L3 EEA team project (6 people, 15 days), UE 3EE206, Sorbonne Université. **My module: the rangefinder** (analog front end, firmware, simulation).
+Time-of-flight rangefinder for a wire-following delivery robot: TX and RX circuits plus register-level C firmware on an NXP LPC1769 (Cortex-M3), no HAL. L3 EEA group project (UE 3EE206, Sorbonne Université), one module per student: **the rangefinder is my module, built on my own.**
 
-- **Tools:** arm-none-eabi-gcc, Make, GitHub Actions CI, gcc for PC tests; Keil µVision 5 also supported.
-- **Flow:** TIMER1 match → 40 kHz burst → RLC filter → 2 × TL082 (×300) → peak detector → LM311 → TIMER1 hardware capture → distance → UART.
-- **Results:** 40.000 kHz burst, **40 ns** timing resolution, echo at 1 m detected at 5.936 ms in simulation (5.83 ms theoretical), firmware ≈ 2 KB flash, PC tests pass.
+- **Tools:** OrCAD, arm-none-eabi-gcc, Make, Keil µVision 5, GitHub Actions, Python.
+- **Flow:** TIMER1 match → 40 kHz burst → IR2304 + MOSFET → transducer; echo → MCP6002 buffer → RLC filter → 2 × TL082 (×300) → peak detector → LM311 → TIMER1 hardware capture → distance → UART.
+- **Results:** firmware flashed on the LPC1769 board, distance sent to a PC over UART; TX and RX built and checked at **10 and 20 cm**; 40.000 kHz burst; 1 988 bytes of flash; PC tests pass.
 
-The firmware here is my post-course version (GCC build, CI, UART FIFO, PC tests), not the exact code that ran on the robot.
+The firmware in this repo is the post-course version (GCC build, CI, UART FIFO, PC tests). The course version ran on the board, built and flashed with Keil µVision 5.
 
-<img src="docs/systeme.png" width="520" alt="System overview: robots, base station and supervision">
+| Tool | Use |
+| --- | --- |
+| OrCAD | Schematics of the TX and RX circuits, simulation |
+| arm-none-eabi-gcc, Make | Firmware build (`.elf`, `.bin`, `.hex`) |
+| Keil µVision 5 | Course version: build and flash |
+| gcc | PC tests of the measurement logic |
+| GitHub Actions | Tests and build on every push |
+| Python (numpy, scipy, matplotlib) | Receive-chain model |
 
 ## 1. Key figures
 
 | Item | Value |
 | --- | --- |
 | Ultrasound | 40 kHz, 8-period burst (200 µs) |
-| Range | 5-250 cm (design target) |
+| Range | 5-250 cm (specification) |
 | Timing resolution | 40 ns (TIMER1 at 25 MHz) |
 | Measurement rate | 10 / 15 / 20 / 25 Hz (2 switches) |
 | Receive filter | Series RLC 100 µH / 160 nF, f0 ≈ 39.8 kHz |
 | Gain | ×300 (two TL082 stages, ×10 then ×30) |
-| Detection | Peak detector, then LM311 comparator (Vref = 6 V) |
+| Detection | Peak detector (D + 10 nF // 2 kΩ, τ = 20 µs), then LM311 comparator (threshold from a resistor divider, 6 V as drawn in the schematic; 3.3 V pull-up) |
 | Debug | UART0 at 115200 baud, 4 modes |
 
 ## 2. Architecture
 
+**Measurement chain:**
+
 ![Measurement chain](docs/chaine.svg)
+
+**Timing of one measurement:**
 
 ![Measurement sequence](docs/sequence.svg)
 
@@ -51,15 +62,26 @@ The echo time is stamped **in hardware** (capture), so it does not depend on int
 | 10 | `T 10 mes/sec` |
 | 11 | none (`DBGx` command mode on the UART) |
 
-## 3. Receive-chain simulation
+## 3. Schematics and receive-chain model
 
-Echo at 1 m through the RLC filter, both gain stages, the peak detector and the comparator. **Detection at 5.936 ms**, against 5.83 ms theoretical at 343 m/s; the 0.1 ms offset is the peak detector's rise time, removable by calibration.
+**Emission:** GPIO P2.13 → IR2304 gate driver → IRFZ24N → 400ST100 transducer (OrCAD).
 
-![Receive-chain simulation](docs/simulation-chaine.png)
+![Emission schematic](docs/schematic-emission.png)
 
-## 4. Tests on PC (no board)
+**Reception:** 400SR100 → MCP6002 buffer → RLC filter → 2 × TL082 → peak detector → LM311 → P1.18 (OrCAD).
 
-`firmware/test/` simulates TIMER1 tick by tick and calls the interrupt handlers as the hardware would. It also covers the 32-bit counter overflow during a measurement.
+![Reception schematic](docs/schematic-reception.png)
+
+**Receive-chain model, echo of a target at 1 m:** a Python reconstruction (`analysis/receive_chain_model.py`) with the component values of the reception schematic. Model assumptions: 5 mV echo, 0.3 mV rms noise, ideal op-amps, diode and comparator.
+
+![Receive-chain model](docs/simulation-chaine.png)
+
+- Echo of a target at 1 m: 5.831 ms. First comparator edge at 5.836 ms for a 5 mV echo; 4 to 31 µs later for echoes of 10 to 2.5 mV (0.5 cm at most).
+- τ = 20 µs is close to the 25 µs period, so the comparator pulses once per cycle. The firmware uses the first rising edge.
+
+## 4. Firmware tests on PC
+
+`firmware/test/` runs `ultrasonic.c` on the PC with a simulated TIMER1: it advances the timer tick by tick and calls the interrupt handlers as the hardware would, including the 32-bit counter overflow.
 
 ```text
 $ cd firmware/test && make
@@ -92,6 +114,9 @@ ALL TESTS PASSED (0 failures)
 sudo apt install gcc-arm-none-eabi
 make -C firmware          # -> firmware/build/rangefinder.elf / .bin / .hex
 make -C firmware test     # PC tests
+pip install -r requirements.txt
+python3 analysis/receive_chain_model.py   # -> docs/simulation-chaine.png
+python3 analysis/diagrams.py              # -> docs/chaine.svg, docs/sequence.svg
 ```
 
 - The `.bin` gets the LPC17xx boot-ROM checksum automatically (`tools/lpc_checksum.py`).
@@ -105,10 +130,12 @@ firmware/src/      main.c, ultrasonic.c (burst + time of flight), uart0.c, board
 firmware/test/     PC tests of ultrasonic.c (simulated registers)
 firmware/startup/  startup code, linker script, system_LPC17xx.c
 firmware/cmsis/    CMSIS and LPC17xx headers
+analysis/          Python: receive-chain model, diagrams, shared plot style
 tools/             flash image checksum
-docs/              measurement chain, sequence, simulation
+docs/              measurement chain, timing, schematics, model figure
 ```
 
 ## Credits
 
-Team of 6; the other robot modules (induction, DTMF, infrared, base-station link) belong to my teammates and are not in this repo. The rangefinder module is mine.
+Course handout: specification of the robot and its modules. Schematics, firmware, simulation and tests: mine.
+The other robot modules (induction, DTMF, infrared, base-station link, wire injection) were done by other students and are not in this repo.
